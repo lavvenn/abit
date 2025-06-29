@@ -1,8 +1,9 @@
 from aiogram import Router
 
+from handlers.start import router as start_router
 
-roter = Router()
+router = Router()
 
-roter.include_routers(
-    
+router.include_routers(
+    start_router
 )

@@ -1,12 +1,21 @@
-from aiogram import Router, F
+import os
+
+from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
+from PIL import Image
+
 from states import adding
 
-from keyboards.reply import education_kb, level_kb, in_process_kb
-from keyboards.builder import direction_college_kb 
+from db.requests import add_applicant
+
+from keyboards.reply import education_kb, in_process_kb
+from keyboards.builder import direction_kb, by_buttons_kb 
+from keyboards.inline import level_kb
+
+from config import DIRECTIONS
 
 router = Router()
 
@@ -15,15 +24,64 @@ async def process_last_name(message: Message, state: FSMContext):
     last_name = message.text
     print(f"Received last name: {last_name}")
     await state.update_data(last_name=last_name)
-    await message.answer("Отлично! выбирите уровень образования.", reply_markup=level_kb)
-    await state.set_state(adding.level)
+    await message.answer("Отлично! Теперь введите email абитуриента.")
+    await state.set_state(adding.email)
 
 
-@router.message(adding.level)
-async def process_level(message: Message, state: FSMContext):
-    level = message.text
+@router.message(adding.email)
+async def process_email(message: Message, state: FSMContext):
+    email = message.text
+    print(f"Received email: {email}")
+    await state.update_data(email=email)
+    await message.answer("Отлично! Теперь введите номер телефона абитуриента. или пропустите этот шаг, нажав 'пропустить'.", reply_markup=by_buttons_kb(["⏭️пропустить", "❌отмена регистрации"]))
+    await state.set_state(adding.phone_number)
+
+
+@router.message(adding.phone_number)
+async def process_phone_number(message: Message, state: FSMContext):
+    if message.text.lower() == "⏭️пропустить":
+        await state.update_data(phone_number=None)
+        await message.answer("Вы пропустили ввод номера телефона абитуриента. Продолжаем.")
+        await message.answer("Теперь введите номер телефона родителя абитуриента  или пропустите этот шаг.", reply_markup=by_buttons_kb(["⏭️пропустить", "❌отмена регистрации"]))
+        await state.set_state(adding.parent_phone_number)
+        return
+    if not message.text.isdigit() or len(message.text) < 10:
+        await message.answer("Пожалуйста, введите корректный номер телефона (только цифры, минимум 10 цифр).")
+        return
+    else:
+        phone_number = message.text
+        print(f"Received phone number: {phone_number}")
+        await state.update_data(phone_number=phone_number)
+        await message.answer("Отлично! Теперь введите номер телефона родителя абитуриента  или пропустите этот шаг.", reply_markup=by_buttons_kb(["⏭️пропустить", "❌отмена регистрации"]))
+        await state.set_state(adding.parent_phone_number)
+
+
+@router.message(adding.parent_phone_number)
+async def process_parent_phone_number(message: Message, state: FSMContext):
+    if message.text.lower() == "⏭️пропустить":
+        await state.update_data(parent_phone_number=None)
+        await message.answer("Вы пропустили ввод номера телефона родителя. Продолжаем.", reply_markup = by_buttons_kb(["❌отмена регистрации"]))
+
+        await message.answer("Теперь выберите уровень образования абитуриента.", reply_markup=level_kb)
+        await state.set_state(adding.level)
+
+    else:
+        if not message.text.isdigit() or len(message.text) < 10:
+            await message.answer("Пожалуйста, введите корректный номер телефона (только цифры, минимум 10 цифр).")
+            
+        else:
+            parent_phone_number = message.text
+            print(f"Received parent phone number: {parent_phone_number}")
+            await state.update_data(parent_phone_number=parent_phone_number)
+            await message.answer("Отлично! Теперь выберите уровень образования абитуриента.", reply_markup=level_kb)
+            await state.set_state(adding.level)
+
+
+@router.callback_query(adding.level)
+async def process_level(query: CallbackQuery, state: FSMContext):
+    level = query.data
     await state.update_data(level=level)
-    await message.answer("Отлично! Выбирете направление.", reply_markup=direction_college_kb(["Направление 1", "Направление 2", "Направление 3", "Направление 4", "Направление 5"]))
+    await query.message.answer("Отлично! Выбирете направление.", reply_markup=direction_kb(DIRECTIONS[level]))
     await state.set_state(adding.direction)
 
 
@@ -36,9 +94,16 @@ async def process_direction(query: CallbackQuery, state: FSMContext):
 
 
 @router.message(adding.photo)
-async def process_photo(message: Message, state: FSMContext):
+async def process_photo(message: Message, state: FSMContext, bot: Bot):
     photo = message.photo[-1] if message.photo else None
     if photo:
+        data = await state.get_data()
+
+        file = await bot.get_file(photo.file_id)
+
+        os.mkdir(f"абитуриенты/{data['last_name']}")
+
+        await bot.download_file(file.file_path, destination=f"абитуриенты/{data['last_name']}/photo.jpg")
         await state.update_data(photo=photo.file_id)
         await message.answer("Спасибо! Теперь отправьте фотографию паспорта.")
         await state.set_state(adding.passport)
@@ -47,9 +112,15 @@ async def process_photo(message: Message, state: FSMContext):
 
 
 @router.message(adding.passport)
-async def process_passport(message: Message, state: FSMContext):
+async def process_passport(message: Message, state: FSMContext, bot: Bot):
     passport = message.photo[-1] if message.photo else None
     if passport:
+        data = await state.get_data()
+
+        file = await bot.get_file(passport.file_id)
+
+        await bot.download_file(file.file_path, destination=f"абитуриенты/{data['last_name']}/passport.jpg")
+
         await state.update_data(passport=passport.file_id)
         await message.answer("Спасибо! Теперь отправьте СНИЛС.")
         await state.set_state(adding.snils)
@@ -58,9 +129,14 @@ async def process_passport(message: Message, state: FSMContext):
 
 
 @router.message(adding.snils)
-async def process_snils(message: Message, state: FSMContext):
+async def process_snils(message: Message, state: FSMContext, bot: Bot):
     snils = message.photo[-1] if message.photo else None
     if snils:
+        data = await state.get_data()
+        file = await bot.get_file(snils.file_id)
+
+        await bot.download_file(file.file_path, destination=f"абитуриенты/{data['last_name']}/snils.jpg")
+
         await state.update_data(snils=snils.file_id)
         await message.answer("Отлично! Теперь отправьте фотографии диплома об образовании. Вниматьельно!! Если у вас несколько фото, отправьте их все по очереди.")
         await state.set_state(adding.education)
@@ -69,25 +145,55 @@ async def process_snils(message: Message, state: FSMContext):
 
 
 @router.message(adding.education)
-async def process_education(message: Message, state: FSMContext):
+async def process_education(message: Message, state: FSMContext, bot: Bot):
     education = message.photo[-1] if message.photo else None
     if education:
-        await state.update_data(education=[education.file_id])
-        await message.answer("отправьте седующюю фотографию документа об образовании или завершите заполнение", reply_markup=education_kb)
+        data = await state.get_data()
+
+        if "education" not in data:
+            await state.update_data(education=[education.file_id])
+            await message.answer("отправьте седующюю фотографию документа об образовании или завершите заполнение", reply_markup=education_kb)
+        else:
+            state.update_data(education=data["education"].append(education.file_id))
+            await message.answer("отправьте седующюю фотографию документа об образовании или завершите заполнение", reply_markup=education_kb)
+
     else:
-        await message.answer("Пожалуйста, отправьте фотографию диплома об образовании.")
+        if message.text == "✅завершить":
+            data = await state.get_data()
+
+            print(data)
 
 
-@router.message(adding.education, F.text == "✅завершить")
-async def finish_education(message: Message, state: FSMContext):
-    data = await state.get_data()
-    last_name = data.get("last_name")
-    passport = data.get("passport")
-    snils = data.get("snils")
-    education = data.get("education")
+            for photo in range(len(data["education"])):
+                file = await bot.get_file(data["education"][photo])
+                await bot.download_file(file.file_path, destination=f"абитуриенты/{data['last_name']}/education_{photo}.jpg")
 
-    # Здесь можно добавить логику для сохранения данных в базу данных или другую обработку
+            
 
-    await message.answer(f"Спасибо, данные {last_name} успешно сохранены.")
-    await state.clear()
+            images = [
+                Image.open(f"абитуриенты/{data['last_name']}/" + f)
+                for f in [f"education_{i}.jpg" for i in range(len(data["education"]))]   
+            ]
+
+            pdf_path = f"абитуриенты/{data['last_name']}/education_result.pdf"
+
+            images[0].save(pdf_path, "PDF" ,resolution=100.0, save_all=True, append_images=images[1:])
+
+
+
+            add_applicant(
+                last_name=data["last_name"],
+                email=data.get("email"),
+                phone_number=data.get("phone_number"),
+                parent_phone_number=data.get("parent_phone_number"),
+                level=data["level"],
+                direction=data["direction"],
+            )
+
+
+            print("Applicant data:", data)
+            await message.answer("Регистрация абитуриента завершена! Спасибо!")
+            await state.clear()
         
+        else:
+            await message.answer("Пожалуйста, отправьте фотографию диплома об образовании.")

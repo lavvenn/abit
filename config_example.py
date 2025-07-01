@@ -26,3 +26,5 @@ DIRECTIONS = {
 }
 
 ADMINS = []  
+
+MAIN_PATH = ""

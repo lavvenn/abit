@@ -15,7 +15,7 @@ from keyboards.reply import education_kb, in_process_kb
 from keyboards.builder import direction_kb, by_buttons_kb 
 from keyboards.inline import level_kb
 
-from config import DIRECTIONS
+from config import DIRECTIONS, MAIN_PATH
 
 router = Router()
 
@@ -103,7 +103,7 @@ async def process_photo(message: Message, state: FSMContext, bot: Bot):
 
         os.mkdir(f"абитуриенты/{data['last_name']}")
 
-        await bot.download_file(file.file_path, destination=f"абитуриенты/{data['last_name']}/photo.jpg")
+        await bot.download_file(file.file_path, destination=f"{MAIN_PATH}/{data['last_name']}/photo.jpg")
         await state.update_data(photo=photo.file_id)
         await message.answer("Спасибо! Теперь отправьте фотографию паспорта.")
         await state.set_state(adding.passport)
@@ -119,7 +119,7 @@ async def process_passport(message: Message, state: FSMContext, bot: Bot):
 
         file = await bot.get_file(passport.file_id)
 
-        await bot.download_file(file.file_path, destination=f"абитуриенты/{data['last_name']}/passport.jpg")
+        await bot.download_file(file.file_path, destination=f"{MAIN_PATH}/{data['last_name']}/passport.jpg")
 
         await state.update_data(passport=passport.file_id)
         await message.answer("Спасибо! Теперь отправьте СНИЛС.")
@@ -135,7 +135,7 @@ async def process_snils(message: Message, state: FSMContext, bot: Bot):
         data = await state.get_data()
         file = await bot.get_file(snils.file_id)
 
-        await bot.download_file(file.file_path, destination=f"абитуриенты/{data['last_name']}/snils.jpg")
+        await bot.download_file(file.file_path, destination=f"{MAIN_PATH}/{data['last_name']}/snils.jpg")
 
         await state.update_data(snils=snils.file_id)
         await message.answer("Отлично! Теперь отправьте фотографии диплома об образовании. Вниматьельно!! Если у вас несколько фото, отправьте их все по очереди.")
@@ -166,16 +166,16 @@ async def process_education(message: Message, state: FSMContext, bot: Bot):
 
             for photo in range(len(data["education"])):
                 file = await bot.get_file(data["education"][photo])
-                await bot.download_file(file.file_path, destination=f"абитуриенты/{data['last_name']}/education_{photo}.jpg")
+                await bot.download_file(file.file_path, destination=f"{MAIN_PATH}/{data['last_name']}/education_{photo}.jpg")
 
             
 
             images = [
-                Image.open(f"абитуриенты/{data['last_name']}/" + f)
+                Image.open(f"{MAIN_PATH}/{data['last_name']}/" + f)
                 for f in [f"education_{i}.jpg" for i in range(len(data["education"]))]   
             ]
 
-            pdf_path = f"абитуриенты/{data['last_name']}/education_result.pdf"
+            pdf_path = f"{MAIN_PATH}/{data['last_name']}/education_result.pdf"
 
             images[0].save(pdf_path, "PDF" ,resolution=100.0, save_all=True, append_images=images[1:])
 

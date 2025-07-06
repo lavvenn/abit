@@ -38,20 +38,31 @@ def add_applicant(last_name: str, email: str,level: str, direction: str, phone_n
     return "Applicant added successfully: " + applicant.last_name
 
 
-def get_applicant_by_last_name(last_name: str) -> Applicant:
+def get_applicant_by_last_name(last_name: str) -> list:
     session = Session()
     stmt = select(Applicant).where(Applicant.last_name == last_name)
     result = session.execute(stmt).scalars().first()
     session.close()
     
     if result:
-        return result
+        return [result.email, result.phone_number, result.parent_phone_number, result.direction, result.level]
+    
     else:
         return None
     
 
+def get_all_applicants():
+    with Session() as session:
+        result = session.execute(select(Applicant)).scalars().all()
+        return result
+
+
+    
+
 if __name__ == "__main__":
-    create_tables()
-    print("Tables created successfully.")
+    # create_tables()
+    # print("Tables created successfully.")
+
+    print(get_applicant_by_last_name("test"))
     
     

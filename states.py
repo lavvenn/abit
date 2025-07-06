@@ -11,3 +11,6 @@ class adding(StatesGroup):
     passport = State()
     snils = State()
     education = State()
+
+class chek(StatesGroup):
+    last_name = State()

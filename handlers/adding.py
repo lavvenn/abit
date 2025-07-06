@@ -11,11 +11,15 @@ from states import adding
 
 from db.requests import add_applicant
 
-from keyboards.reply import education_kb, in_process_kb
+from keyboards.reply import education_kb, in_process_kb, main_kb
 from keyboards.builder import direction_kb, by_buttons_kb 
 from keyboards.inline import level_kb
 
 from config import DIRECTIONS, MAIN_PATH
+
+def create_info_txt(file_name: str, last_name: str, email: str,level: str, direction: str, phone_number: str = None, parent_phone_number: str = None):
+    with open(f"{file_name}", "w", encoding="UTF-8") as file:
+        file.write(f"почта--> {email}\nномер абитуриента--> {phone_number} \nномер родителя--> {parent_phone_number} \nнаправление--> {direction} \nуровень образования --> {level}")
 
 router = Router()
 
@@ -24,7 +28,7 @@ async def process_last_name(message: Message, state: FSMContext):
     last_name = message.text
     print(f"Received last name: {last_name}")
     await state.update_data(last_name=last_name)
-    await message.answer("Отлично! Теперь введите email абитуриента.")
+    await message.answer("Отлично! Теперь введите email абитуриента.",reply_markup=by_buttons_kb(["❌отмена регистрации"]))
     await state.set_state(adding.email)
 
 
@@ -40,7 +44,7 @@ async def process_email(message: Message, state: FSMContext):
 @router.message(adding.phone_number)
 async def process_phone_number(message: Message, state: FSMContext):
     if message.text.lower() == "⏭️пропустить":
-        await state.update_data(phone_number=None)
+        await state.update_data(phone_number="0000000000")
         await message.answer("Вы пропустили ввод номера телефона абитуриента. Продолжаем.")
         await message.answer("Теперь введите номер телефона родителя абитуриента  или пропустите этот шаг.", reply_markup=by_buttons_kb(["⏭️пропустить", "❌отмена регистрации"]))
         await state.set_state(adding.parent_phone_number)
@@ -59,7 +63,7 @@ async def process_phone_number(message: Message, state: FSMContext):
 @router.message(adding.parent_phone_number)
 async def process_parent_phone_number(message: Message, state: FSMContext):
     if message.text.lower() == "⏭️пропустить":
-        await state.update_data(parent_phone_number=None)
+        await state.update_data(parent_phone_number="0000000000")
         await message.answer("Вы пропустили ввод номера телефона родителя. Продолжаем.", reply_markup = by_buttons_kb(["❌отмена регистрации"]))
 
         await message.answer("Теперь выберите уровень образования абитуриента.", reply_markup=level_kb)
@@ -89,7 +93,7 @@ async def process_level(query: CallbackQuery, state: FSMContext):
 async def process_direction(query: CallbackQuery, state: FSMContext):
     direction = query.data
     await state.update_data(direction=direction)
-    await query.message.answer("Отлично! Теперь отправьте фотографию абитуриента.", reply_markup=in_process_kb)
+    await query.message.answer("Отлично! Теперь отправьте фотографию абитуриента.", reply_markup=by_buttons_kb(["❌отмена регистрации"]))
     await state.set_state(adding.photo)
 
 
@@ -101,7 +105,7 @@ async def process_photo(message: Message, state: FSMContext, bot: Bot):
 
         file = await bot.get_file(photo.file_id)
 
-        os.mkdir(f"абитуриенты/{data['last_name']}")
+        os.mkdir(f"{MAIN_PATH}/{data['last_name']}")
 
         await bot.download_file(file.file_path, destination=f"{MAIN_PATH}/{data['last_name']}/photo.jpg")
         await state.update_data(photo=photo.file_id)
@@ -190,9 +194,19 @@ async def process_education(message: Message, state: FSMContext, bot: Bot):
                 direction=data["direction"],
             )
 
+            create_info_txt(
+                file_name=f"{MAIN_PATH}\{data['last_name']}\info.txt",
+                last_name=data["last_name"],
+                email=data.get("email"),
+                phone_number=data.get("phone_number"),
+                parent_phone_number=data.get("parent_phone_number"),
+                level=data["level"],
+                direction=data["direction"],
+            )
+
 
             print("Applicant data:", data)
-            await message.answer("Регистрация абитуриента завершена! Спасибо!")
+            await message.answer("Регистрация абитуриента завершена! Спасибо!", reply_markup=main_kb)
             await state.clear()
         
         else:
